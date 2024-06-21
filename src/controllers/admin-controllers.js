@@ -4,6 +4,7 @@ const { check } = require("prisma")
 const bcrypt = require('bcryptjs')
 const connection = require("../configs/sql-server")
 const jwt = require('jsonwebtoken');
+const util = require('util');
 
 exports.roleUser = async (req, res, next) => {
     try {
@@ -93,11 +94,13 @@ exports.updateUser = async (req, res, next) => {
 
 
 exports.searchUser = async (req, res, next) => {
-    const { card } = req.params
+    const card = req.query.card || ''
+    const username = req.query.username || null
+    console.log(username)
     try {
         connection.connect()
 
-        connection.query(`select u.CID, u.username, u.passrname1, u.password1, u.BAnumber, u.GetPay, t.typeuserName from userlogin as u inner join typeuser as t on u.typeuserID  = t.typeuserID where u.CID = '${card}'`, function (error, results, fields) {
+        connection.query(`select u.CID, u.username, u.passrname1, u.password1, u.BAnumber, u.GetPay, t.typeuserName from userlogin as u inner join typeuser as t on u.typeuserID  = t.typeuserID where u.CID = '${card}' or u.username = '${username}'`, function (error, results, fields) {
             if (error) throw error
             const user = results[0]
             // console.log(results)
@@ -147,12 +150,54 @@ exports.reportsumuser = async (req, res, next) => {
             FROM userlogin
             INNER JOIN typeuser ON userlogin.typeuserID = typeuser.typeuserID
             GROUP BY userlogin.typeuserID, typeuser.typeuserName
-            ORDER BY userlogin.typeuserID ASC, typeuser.typeuserName ASC;`, 
+            ORDER BY userlogin.typeuserID ASC, typeuser.typeuserName ASC;`,
             function (error, results, fields) {
                 if (error) throw error;
                 res.json(results);
             }
         );
+    } catch (err) {
+        next(err);
+    }
+};
+
+const mysql = require('mysql');
+
+exports.getAddusersystem = async (req, res, next) => {
+    try {
+        connection.connect();
+        connection.query(`SELECT * FROM office_sit`, function (error, results, fields) {
+            if (error) {
+                connection.end();
+                throw (error);
+            }
+            const Addusersystem = results
+            res.json({ Addusersystem })
+        })
+    } catch (err) {
+        next(err)
+        console.log(err)
+    }
+}
+
+const query = util.promisify(connection.query).bind(connection);
+
+exports.postAddusersystem = async (req, res, next) => {
+    const { USID, CID, office_id, statedit } = req.body;
+    const maxIDResult = await query(`SELECT MAX(USID) AS MaxID FROM usersystem`);
+    const maxID = maxIDResult[0].MaxID || 0;
+    console.log(maxID)
+    const newUSID = maxID + 1;
+    try {
+        const query = `INSERT INTO usersystem (USID, CID, office_id, statedit) VALUES (?, ?, ?, ?)`;
+        const values = [newUSID, CID, office_id, statedit];
+
+        connection.query(query, values, (error, results) => {
+            if (error) {
+                return next(error);
+            }
+            res.status(201).json({ message: 'User added successfully', userId: results.insertId });
+        });
     } catch (err) {
         next(err);
     }

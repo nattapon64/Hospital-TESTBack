@@ -4,6 +4,7 @@ const connection = require("../configs/sql-server");
 module.exports = async (req, res, next) => {
   try {
     const authorization = req.headers.authorization;
+
     if (!authorization) {
       throw new Error("Unauthorsized");
     }
