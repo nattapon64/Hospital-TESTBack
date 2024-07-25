@@ -152,17 +152,17 @@ exports.login = async (req, res, next) => {
         }
 
         const user = results[0];
-        let orgpassword;
 
-        if (user.password1.startsWith("U")) {
-          const decrypted = crypto.AES.decrypt(user.password1, process.env.ENCODE);
-          orgpassword = decrypted.toString(crypto.enc.Utf8);
-        } else {
-          orgpassword = user.password1;
+        if (user.password1 === "") {
+          return res.json({ result: "Error", message: "Password is empty" })
         }
 
+        const decrypted = crypto.AES.decrypt(user.password1, process.env.ENCODE);
+        const orgpassword = decrypted.toString(crypto.enc.Utf8);
+        console.log("Decrypted Password:", orgpassword);
+
         if (orgpassword !== password1) {
-          return res.json({ message: user.password1.startsWith("U") ? "fall" : "wow" });
+          return res.json({ message: "Error password is not correct!" });
         }
 
         const token = await jwt.sign(

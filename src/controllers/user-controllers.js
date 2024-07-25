@@ -91,7 +91,7 @@ exports.reportUserOT = async (req, res, next) => {
                 if (user.token) {
                     const decodedToken = jwt.decode(user.token);
                     user.decodedToken = decodedToken;
-                    console.log(decodedToken);
+                    // console.log(decodedToken);
                 }
                 console.log(user);
                 return res.json({ user });
