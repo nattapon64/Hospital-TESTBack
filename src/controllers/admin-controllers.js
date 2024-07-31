@@ -134,18 +134,18 @@ exports.updateUser = async (req, res, next) => {
     } = req.body;
 
     if (password1 !== confirmPassword) {
-        return res.status(400).json({ error: 'Passwords do not match' });
+        return res.status(400).json({ error: 'รหัสผ่านไม่ตรงกัน' });
     }
 
     try {
         const hashedPassword = password1 ? crypto.AES.encrypt(password1, process.env.ENCODE).toString() : undefined;
 
-        const sql = `UPDATE userlogin SET 
+        let sql = `UPDATE userlogin SET 
             username = ?, 
             passrname1 = ?, 
             ${password1 ? 'password1 = ?, ' : ''} 
             BAnumber = ?, 
-            ${roleID ? 'roleID = ?, ' : ''} 
+            ${roleID ? 'typeuserID = ?, ' : ''} 
             GetPay = ?, 
             statedit = ?, 
             group30ID = ?, 
@@ -154,7 +154,7 @@ exports.updateUser = async (req, res, next) => {
             superuser = ? 
             WHERE CID = ?`;
 
-        const values = [
+        let values = [
             username,
             passrname1,
             ...(password1 ? [hashedPassword] : []),
@@ -169,17 +169,22 @@ exports.updateUser = async (req, res, next) => {
             CID
         ];
 
+        // ลบ placeholder ของ roleID หากไม่มีใน values array
+        if (!roleID) {
+            sql = sql.replace('typeuserID = ?, ', '');
+        }
+
         query(sql, values, (error, results) => {
             if (error) {
-                console.error('Error updating user:', error);
-                return res.status(500).json({ error: 'Error updating user' });
+                console.error('เกิดข้อผิดพลาดในการอัปเดตผู้ใช้:', error);
+                return res.status(500).json({ error: 'ข้อผิดพลาดในการอัปเดตผู้ใช้' });
             }
-            console.log('User updated successfully');
-            res.status(200).json({ message: 'User updated successfully' });
+            console.log('อัปเดตผู้ใช้สำเร็จ');
+            res.status(200).json({ message: 'อัปเดตผู้ใช้สำเร็จ' });
         });
     } catch (error) {
-        console.error('Error processing request:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('เกิดข้อผิดพลาดในการดำเนินการคำขอ:', error);
+        res.status(500).json({ error: 'ข้อผิดพลาดภายในเซิร์ฟเวอร์' });
     }
 };
 
@@ -222,19 +227,47 @@ exports.searchUserID = async (req, res, next) => {
     }
 };
 
-
-
-
 exports.searchUser = async (req, res, next) => {
+    const card = req.query.CID || '';
+    const username = req.query.username || '';
+
+    let query = `
+        SELECT u.CID, u.username, u.passrname1, u.password1, u.BAnumber, u.GetPay, t.typeuserName
+        FROM userlogin AS u
+        INNER JOIN typeuser AS t ON u.typeuserID = t.typeuserID
+        WHERE 1=1
+    `;
+
+    if (card) {
+        query += ` AND u.CID LIKE '%${card}%'`;
+    }
+
+    if (username) {
+        query += ` AND u.username LIKE '%${username}%'`;
+    }
+
+    try {
+        connection.connect();
+        connection.query(query, function (error, results, fields) {
+            if (error) throw error;
+            res.json({ users: results });
+        });
+    } catch (err) {
+        next(err);
+    }
+}
+
+
+
+exports.searchUserid = async (req, res, next) => {
     const card = req.query.CID || ''
-    const username = req.query.username || null
-    console.log(username)
+    // console.log(username)
     try {
         connection.connect()
 
-        connection.query(`select u.CID, u.username, u.passrname1, u.password1, u.BAnumber, u.GetPay, t.typeuserName from userlogin as u inner join typeuser as t on u.typeuserID  = t.typeuserID 
+        connection.query(`select u.CID, u.username, u.passrname1, u.password1, u.BAnumber, u.GetPay, t.typeuserID from userlogin as u INNER join typeuser as t on u.typeuserID  = t.typeuserID 
         where 
-        u.CID = '${card}' or u.username = '${username}'`, function (error, results, fields) {
+        u.CID = '${card}'`, function (error, results, fields) {
             if (error) throw error
             const user = results[0]
             // console.log(results)
@@ -350,6 +383,7 @@ exports.postAddusersystem = async (req, res, next) => {
             }
             res.status(200).json({ message: 'User added successfully', userId: results.insertId });
         });
+
     } catch (err) {
         next(err);
     }
@@ -361,6 +395,12 @@ exports.getReportsumuseBA_NULL = async (req, res, next) => {
         const page = parseInt(req.query.page) || 1;
         const offset = (page - 1) * limit;
 
+        const queryCount = `
+        SELECT COUNT(*) as totalCount
+        FROM userlogin
+        WHERE userlogin.BAnumber IS NULL OR userlogin.BAnumber = ''
+        `;
+
         const queryNULL = `
         SELECT userlogin.CID, userlogin.username, userlogin.BAnumber, userlogin.Getpay, userlogin.typeuserID, typeuser.typeuserName
         FROM userlogin
@@ -370,16 +410,27 @@ exports.getReportsumuseBA_NULL = async (req, res, next) => {
         LIMIT ? OFFSET ?
         `;
 
-        connection.query(queryNULL, [limit, offset], function (error, results, fields) {
-            if (error) {
-                return next(error);
-            }
-            if (results.length > 0) {
-                res.json({ results });
-            } else {
-                res.json({ message: "No records with NULL or empty BAnumber found" });
-            }
+        // Execute both queries in parallel
+        const [countResults, dataResults] = await Promise.all([
+            new Promise((resolve, reject) => {
+                connection.query(queryCount, (error, results) => {
+                    if (error) return reject(error);
+                    resolve(results[0].totalCount);
+                });
+            }),
+            new Promise((resolve, reject) => {
+                connection.query(queryNULL, [limit, offset], (error, results) => {
+                    if (error) return reject(error);
+                    resolve(results);
+                });
+            })
+        ]);
+
+        res.json({
+            results: dataResults,
+            totalCount: countResults
         });
+
     } catch (err) {
         next(err);
     }
@@ -392,6 +443,12 @@ exports.getReportsumuseBA_NOTNULL = async (req, res, next) => {
         const page = parseInt(req.query.page) || 1;
         const offset = (page - 1) * limit;
 
+        const queryCount = `
+        SELECT COUNT(*) as totalCount
+        FROM userlogin
+        WHERE userlogin.BAnumber IS NOT NULL AND userlogin.BAnumber != ''
+        `;
+
         const queryNOTNULL = `
         SELECT userlogin.CID, userlogin.username, userlogin.BAnumber, userlogin.Getpay, userlogin.typeuserID, typeuser.typeuserName
         FROM userlogin
@@ -401,21 +458,69 @@ exports.getReportsumuseBA_NOTNULL = async (req, res, next) => {
         LIMIT ? OFFSET ?
         `;
 
-        connection.query(queryNOTNULL, [limit, offset], function (error, results, fields) {
-            if (error) {
-                return next(error);
-            }
-            if (results.length > 0) {
-                res.json({ results });
-            } else {
-                res.json({ message: "No records with non-NULL BAnumber found" });
-            }
+        // Execute both queries in parallel
+        const [countResults, dataResults] = await Promise.all([
+            new Promise((resolve, reject) => {
+                connection.query(queryCount, (error, results) => {
+                    if (error) return reject(error);
+                    resolve(results[0].totalCount);
+                });
+            }),
+            new Promise((resolve, reject) => {
+                connection.query(queryNOTNULL, [limit, offset], (error, results) => {
+                    if (error) return reject(error);
+                    resolve(results);
+                });
+            })
+        ]);
+
+        res.json({
+            results: dataResults,
+            totalCount: countResults
         });
 
     } catch (err) {
         next(err);
     }
 };
+
+
+
+exports.searchReportBA = async (req, res, next) => {
+    connection.connect();
+
+    try {
+        const { search, page = 1, limit = 50 } = req.query;
+        const offset = (page - 1) * limit;
+
+        let sql = 'SELECT * FROM hospital.userlogin WHERE 1=1';
+        const params = [];
+
+        if (search) {
+            sql += ' AND (username LIKE ? OR CID LIKE ?)';
+            params.push(`%${search}%`, `%${search}%`);
+        }
+
+        sql += ' LIMIT ? OFFSET ?';
+        params.push(parseInt(limit, 10), parseInt(offset, 10));
+
+        connection.query(sql, params, (error, results) => {
+            if (error) return next(error);
+
+            const countSql = 'SELECT COUNT(*) AS totalCount FROM hospital.userlogin WHERE (username LIKE ? OR CID LIKE ?)';
+            connection.query(countSql, [params[0], params[1]], (countError, countResults) => {
+                if (countError) return next(countError);
+
+                const totalCount = countResults[0].totalCount;
+                res.json({ results, totalCount });
+            });
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
 
 
 exports.getreportsumtypeOT = async (req, res, next) => {

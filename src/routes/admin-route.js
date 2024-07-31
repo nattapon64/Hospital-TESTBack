@@ -7,6 +7,7 @@ const router = express.Router()
 router.get('/roleuser', Authenticate, adminController.roleUser);
 router.get('/Tmouth', Authenticate, adminController.Tmouth)
 router.get('/searchUserID', Authenticate, adminController.searchUserID)
+router.get('/userID/ID*', Authenticate, adminController.searchUserid);
 router.get('/user*', Authenticate, adminController.searchUser);
 router.get('/reportuser/:type', Authenticate, adminController.reportuser);
 router.get('/reportsumuser', Authenticate, adminController.reportsumuser);
@@ -17,6 +18,7 @@ router.get('/reportsumtypeOT', Authenticate, adminController.getreportsumtypeOT)
 router.get('/getAddtypeOT', Authenticate, adminController.getAddtypeOT)
 router.get('/reportsumOTU01', Authenticate, adminController.reportsumOTU01)
 router.get('/ReMoOTDetai02*', Authenticate, adminController.ReMoOTDetai02)
+router.get('/searchReportBA*', Authenticate, adminController.searchReportBA)
 
 router.post('/postaddusersystem', Authenticate, adminController.postAddusersystem);
 router.post('/postAddtypeOT', Authenticate, adminController.postAddtypeOT)
